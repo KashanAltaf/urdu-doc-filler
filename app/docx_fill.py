@@ -7,6 +7,7 @@ from typing import Any
 from zipfile import ZipFile, ZIP_DEFLATED
 
 from docx import Document
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt
 from docxtpl import DocxTemplate
@@ -60,24 +61,49 @@ def _set_run_font(run, font_name: str = URDU_FONT, size_pt: float | None = None)
         run.font.size = Pt(size_pt)
 
 
+def _ensure_para_rtl(paragraph) -> None:
+    """Set Word 'Right-to-Left Text Direction' (w:bidi) on a paragraph."""
+    pPr = paragraph._p.get_or_add_pPr()
+    if pPr.find(qn("w:bidi")) is None:
+        pPr.append(OxmlElement("w:bidi"))
+
+
+def _ensure_run_rtl(run) -> None:
+    """Mark a text run as RTL complex-script."""
+    if run._element.find(qn("w:drawing")) is not None:
+        return
+    if not (run.text or "").strip():
+        return
+    rPr = run._element.get_or_add_rPr()
+    if rPr.find(qn("w:rtl")) is None:
+        rPr.append(OxmlElement("w:rtl"))
+
+
 def apply_urdu_font(docx_path: Path, font_name: str = URDU_FONT) -> None:
     """Force Jameel Noori Nastaleeq on body text runs (never touch headers)."""
     doc = Document(str(docx_path))
 
     def style_paragraphs(paragraphs) -> None:
         for para in paragraphs:
+            _ensure_para_rtl(para)
             for run in para.runs:
                 if run._element.find(qn("w:drawing")) is not None:
                     continue
                 if not (run.text or "").strip():
                     continue
                 _set_run_font(run, font_name)
+                _ensure_run_rtl(run)
 
     style_paragraphs(doc.paragraphs)
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 style_paragraphs(cell.paragraphs)
+
+    for section in doc.sections:
+        sectPr = section._sectPr
+        if sectPr is not None and sectPr.find(qn("w:bidi")) is None:
+            sectPr.insert(0, OxmlElement("w:bidi"))
 
     doc.save(str(docx_path))
     restore_original_headers(docx_path)
