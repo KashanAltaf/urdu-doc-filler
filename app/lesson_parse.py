@@ -108,41 +108,24 @@ def parse_lesson_paste(text: str) -> dict[str, Any]:
 
         if _is_objectives_header(line):
             mode = "objectives"
-            result["objectives_label"] = "تعلیمی مقاصد"
             continue
         if _is_success_header(line):
             mode = "success"
-            result["outcomes_label"] = line
             continue
         if _is_table_header(line):
             mode = "table"
             cols = _split_row(line)
             activity_order = _header_field_order(cols)
-            # Store headers by role for the Word template columns
-            role_to_label = {}
-            for col in cols:
-                role = _column_role(col)
-                if role:
-                    role_to_label[role] = col
-            if "time" in role_to_label:
-                result["col_time"] = role_to_label["time"]
-            if "teacher" in role_to_label:
-                result["col_teacher"] = role_to_label["teacher"]
-            if "student" in role_to_label:
-                result["col_student"] = role_to_label["student"]
-            if "assessment" in role_to_label:
-                result["col_assessment"] = role_to_label["assessment"]
-            if "materials" in role_to_label:
-                result["col_materials"] = role_to_label["materials"]
+            # Do not override form headings from paste — headings stay from 2026 template
             continue
         if _is_review_header(line):
             mode = "review"
-            # Keep only the heading label for the doc
             heading = line.rstrip(":：").strip()
             if ":" in line or "：" in line:
                 heading = re.split(r"[:：]", line, maxsplit=1)[0].strip()
-            result["review_heading"] = heading if heading.startswith("سبق") else "سبق کا جائزہ"
-            # If instruction text after colon on same line, ignore for body
+            # Keep short heading only; form provides the label style
+            if heading.startswith("سبق"):
+                result["review_heading"] = "سبق کا جائزہ"
             continue
 
         if mode == "objectives":

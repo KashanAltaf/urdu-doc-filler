@@ -114,6 +114,7 @@ async def generate(
         raise HTTPException(status_code=404, detail="ٹیمپلیٹ نہیں ملا۔ دوبارہ اپ لوڈ کریں۔")
 
     context: dict = dict(_load_defaults()) if token == "default" else {}
+    defaults = _load_defaults()
 
     if fields_json.strip():
         try:
@@ -130,6 +131,24 @@ async def generate(
             raise HTTPException(status_code=400, detail="فیلڈز کا ڈیٹا درست نہیں۔") from exc
     elif looks_like_lesson_paste(content):
         context.update(parse_lesson_paste(content))
+
+    # Headings always from the 2026 form defaults
+    for key in (
+        "subject_header",
+        "date_label",
+        "class_label",
+        "outcomes_label",
+        "objectives_label",
+        "col_time",
+        "col_teacher",
+        "col_student",
+        "col_assessment",
+        "col_materials",
+        "extra_rows_note",
+        "review_heading",
+    ):
+        if key in defaults:
+            context[key] = defaults[key]
 
     context = context_from_flat_fields(context)
 

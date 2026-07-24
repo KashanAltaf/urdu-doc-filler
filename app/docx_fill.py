@@ -67,22 +67,15 @@ def _set_run_font(run, font_name: str = URDU_FONT, size_pt: float | None = None)
 
 
 
-def _ensure_para_rtl(paragraph) -> None:
-    """Set Word 'Right-to-Left Text Direction' (w:bidi) on a paragraph."""
-    pPr = paragraph._p.get_or_add_pPr()
-    if pPr.find(qn("w:bidi")) is None:
-        pPr.append(OxmlElement("w:bidi"))
-
-
 def _set_align_right(paragraph) -> None:
-    """Select Word Paragraph → Align Right (Ctrl+R)."""
+    """Word Align Right — same as Planner3 (w:jc=right)."""
     from docx.enum.text import WD_ALIGN_PARAGRAPH
 
     paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
 
 def _ensure_run_rtl(run) -> None:
-    """Mark a text run as RTL complex-script."""
+    """Run-level RTL like Planner3 (w:rtl on text runs, no paragraph bidi)."""
     if run._element.find(qn("w:drawing")) is not None:
         return
     if not (run.text or "").strip():
@@ -93,12 +86,17 @@ def _ensure_run_rtl(run) -> None:
 
 
 def apply_urdu_font(docx_path: Path, font_name: str = URDU_FONT) -> None:
-    """Apply Urdu font + RTL. Align Right everywhere except school name/logo."""
+    """
+    Match Planner3 writing style:
+    - school name: center
+    - everything else: Align Right
+    - run-level RTL (no paragraph bidi)
+    - Jameel Noori Nastaleeq
+    """
     doc = Document(str(docx_path))
 
     def style_paragraphs(paragraphs, *, align_right: bool) -> None:
         for para in paragraphs:
-            _ensure_para_rtl(para)
             if align_right:
                 _set_align_right(para)
             for run in para.runs:
@@ -110,18 +108,12 @@ def apply_urdu_font(docx_path: Path, font_name: str = URDU_FONT) -> None:
                 _ensure_run_rtl(run)
 
     for idx, para in enumerate(doc.paragraphs):
-        # idx 0 = school name + logo — leave alignment (center)
         style_paragraphs([para], align_right=(idx != 0))
 
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
                 style_paragraphs(cell.paragraphs, align_right=True)
-
-    for section in doc.sections:
-        sectPr = section._sectPr
-        if sectPr is not None and sectPr.find(qn("w:bidi")) is None:
-            sectPr.insert(0, OxmlElement("w:bidi"))
 
     doc.save(str(docx_path))
     restore_original_headers(docx_path)
