@@ -30,7 +30,9 @@ def _is_review_header(line: str) -> bool:
 
 def _is_table_header(line: str) -> bool:
     t = _norm(line)
-    return "وقت" in t and ("مواد" in t or "وسائل" in t)
+    return "وقت" in t and (
+        "مواد" in t or "وسائل" in t or "سرگرمی" in t or "جائزہ" in t
+    )
 
 
 def _split_row(line: str) -> list[str]:
@@ -39,6 +41,34 @@ def _split_row(line: str) -> list[str]:
     else:
         parts = [p.strip() for p in re.split(r"\s{2,}", line)]
     return [p for p in parts if p]
+
+
+def _column_role(col: str) -> str | None:
+    """Map a header cell label to activity field name."""
+    t = _norm(col)
+    if t == "وقت" or (t.startswith("وقت") and "مواد" not in t and "سرگرمی" not in t):
+        return "time"
+    if "استاد" in t or ("موضوع" in t and "مواد" in t):
+        return "teacher"
+    if "طلبہ" in t or "طریق" in t:
+        return "student"
+    if "جائزہ" in t or "تشکیل" in t:
+        return "assessment"
+    if "مواد" in t or "وسائل" in t:
+        return "materials"
+    return None
+
+
+def _header_field_order(cols: list[str]) -> list[str]:
+    roles = []
+    for col in cols:
+        role = _column_role(col)
+        if role:
+            roles.append(role)
+    # Fallback: classic paste order
+    if len(roles) < 5:
+        return ["time", "materials", "assessment", "student", "teacher"]
+    return roles[:5]
 
 
 def parse_lesson_paste(text: str) -> dict[str, Any]:
@@ -70,12 +100,10 @@ def parse_lesson_paste(text: str) -> dict[str, Any]:
 
     mode: str | None = None
     review_parts: list[str] = []
+    activity_order = ["time", "materials", "assessment", "student", "teacher"]
 
     for line in lines:
         if not line:
-            if mode == "review" and review_parts:
-                # keep paragraph breaks as spaces already handled by join
-                continue
             continue
 
         if _is_objectives_header(line):
@@ -89,16 +117,32 @@ def parse_lesson_paste(text: str) -> dict[str, Any]:
         if _is_table_header(line):
             mode = "table"
             cols = _split_row(line)
-            if len(cols) >= 5:
-                result["col_time"] = cols[0]
-                result["col_materials"] = cols[1]
-                result["col_assessment"] = cols[2]
-                result["col_student"] = cols[3]
-                result["col_teacher"] = cols[4]
+            activity_order = _header_field_order(cols)
+            # Store headers by role for the Word template columns
+            role_to_label = {}
+            for col in cols:
+                role = _column_role(col)
+                if role:
+                    role_to_label[role] = col
+            if "time" in role_to_label:
+                result["col_time"] = role_to_label["time"]
+            if "teacher" in role_to_label:
+                result["col_teacher"] = role_to_label["teacher"]
+            if "student" in role_to_label:
+                result["col_student"] = role_to_label["student"]
+            if "assessment" in role_to_label:
+                result["col_assessment"] = role_to_label["assessment"]
+            if "materials" in role_to_label:
+                result["col_materials"] = role_to_label["materials"]
             continue
         if _is_review_header(line):
             mode = "review"
-            result["review_heading"] = line.rstrip(":：").strip()
+            # Keep only the heading label for the doc
+            heading = line.rstrip(":：").strip()
+            if ":" in line or "：" in line:
+                heading = re.split(r"[:：]", line, maxsplit=1)[0].strip()
+            result["review_heading"] = heading if heading.startswith("سبق") else "سبق کا جائزہ"
+            # If instruction text after colon on same line, ignore for body
             continue
 
         if mode == "objectives":
@@ -110,15 +154,11 @@ def parse_lesson_paste(text: str) -> dict[str, Any]:
         if mode == "table":
             cols = _split_row(line)
             if len(cols) >= 5:
-                result["activities"].append(
-                    {
-                        "time": cols[0],
-                        "materials": cols[1],
-                        "assessment": cols[2],
-                        "student": cols[3],
-                        "teacher": cols[4],
-                    }
-                )
+                row = {key: "" for key in ("time", "materials", "assessment", "student", "teacher")}
+                for idx, key in enumerate(activity_order):
+                    if idx < len(cols):
+                        row[key] = cols[idx]
+                result["activities"].append(row)
             continue
         if mode == "review":
             review_parts.append(line)
@@ -140,8 +180,8 @@ def parse_lesson_paste(text: str) -> dict[str, Any]:
 
         if key == "ہفتہ" or key.startswith("ہفتہ"):
             result["week"] = value if "ہفتہ" in value else f"{value} ہفتہ"
-        elif "پیریڈ" in key or "پیرڈ" in key:
-            result["club_period"] = line  # keep full "سنگل پیریڈ: 40 منٹ"
+        elif "پیریڈ" in key or "پیرڈ" in key or key == "دورانیہ":
+            result["club_period"] = line
         elif key.upper().startswith("SDG") or key == "SDG":
             result["sdg"] = line if line.upper().startswith("SDG") else f"SDG: {value}"
         elif "عنوان" in key:

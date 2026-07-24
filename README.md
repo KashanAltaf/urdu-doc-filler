@@ -107,7 +107,8 @@ SDG: SDG 4 – معیاری تعلیم
 | Path | Role |
 |------|------|
 | `app/main.py` | FastAPI app (Vercel entrypoint) |
-| `templates/lesson_plan_template.docx` | Word template |
+| `templates/lesson formet in urdu 2026.docx` | Source form (layout/format) |
+| `templates/lesson_plan_template.docx` | Fillable template used for downloads |
 | `app/default_values.json` | Default field values |
 | `vercel.json` | Vercel function settings |
 | `requirements.txt` | Python dependencies |
