@@ -74,35 +74,18 @@ def _ensure_para_rtl(paragraph) -> None:
         pPr.append(OxmlElement("w:bidi"))
 
 
-def _ensure_para_align_right(paragraph) -> None:
-    """Force Align Right so Word's Align Right control is active."""
+def _center_to_right(paragraph) -> None:
+    """If Align Center is active, switch to Align Right only."""
     from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     pPr = paragraph._p.get_or_add_pPr()
     jc = pPr.find(qn("w:jc"))
-    if jc is None:
-        jc = OxmlElement("w:jc")
-        pPr.append(jc)
-    jc.set(qn("w:val"), "right")
-    # Drop conflicting indentation that can make RTL text look left-stuck
-    for tag in ("w:ind", "w:framePr"):
-        el = pPr.find(qn(tag))
-        if el is not None:
-            pPr.remove(el)
-
-
-def _ensure_table_rtl(table) -> None:
-    """Mark table as RTL visual so Urdu columns/alignment behave correctly."""
-    tbl = table._tbl
-    tblPr = tbl.tblPr
-    if tblPr is None:
-        tblPr = OxmlElement("w:tblPr")
-        tbl.insert(0, tblPr)
-    if tblPr.find(qn("w:bidiVisual")) is None:
-        # place near start of tblPr
-        bidi = OxmlElement("w:bidiVisual")
-        tblPr.insert(0, bidi)
+    if jc is not None and jc.get(qn("w:val")) == "center":
+        jc.set(qn("w:val"), "right")
+        return
+    # Style may imply center without local jc
+    if paragraph.alignment == WD_ALIGN_PARAGRAPH.CENTER:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
 
 def _ensure_run_rtl(run) -> None:
@@ -117,15 +100,14 @@ def _ensure_run_rtl(run) -> None:
 
 
 def apply_urdu_font(docx_path: Path, font_name: str = URDU_FONT) -> None:
-    """Force Urdu font, RTL, and right-align (except school name / logo)."""
+    """Apply Urdu font + RTL. Only change Align Center → Align Right (not school name)."""
     doc = Document(str(docx_path))
 
-    # First body paragraph = school name + logo — keep centered
-    def style_paragraphs(paragraphs, *, force_right: bool) -> None:
+    def style_paragraphs(paragraphs, *, fix_center: bool) -> None:
         for para in paragraphs:
             _ensure_para_rtl(para)
-            if force_right:
-                _ensure_para_align_right(para)
+            if fix_center:
+                _center_to_right(para)
             for run in para.runs:
                 if run._element.find(qn("w:drawing")) is not None:
                     continue
@@ -135,31 +117,13 @@ def apply_urdu_font(docx_path: Path, font_name: str = URDU_FONT) -> None:
                 _ensure_run_rtl(run)
 
     for idx, para in enumerate(doc.paragraphs):
-        if idx == 0:
-            # Logo + school name: keep center alignment
-            _ensure_para_rtl(para)
-            pPr = para._p.get_or_add_pPr()
-            jc = pPr.find(qn("w:jc"))
-            if jc is None:
-                jc = OxmlElement("w:jc")
-                pPr.append(jc)
-            jc.set(qn("w:val"), "center")
-            for run in para.runs:
-                if run._element.find(qn("w:drawing")) is not None:
-                    continue
-                if not (run.text or "").strip():
-                    continue
-                _set_run_font(run, font_name)
-                _ensure_run_rtl(run)
-        else:
-            style_paragraphs([para], force_right=True)
+        # Keep school name / logo paragraph as-is (usually center)
+        style_paragraphs([para], fix_center=(idx != 0))
 
     for table in doc.tables:
-        _ensure_table_rtl(table)
         for row in table.rows:
             for cell in row.cells:
-                style_paragraphs(cell.paragraphs, force_right=True)
-
+                style_paragraphs(cell.paragraphs, fix_center=True)
 
     for section in doc.sections:
         sectPr = section._sectPr
