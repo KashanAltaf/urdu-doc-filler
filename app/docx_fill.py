@@ -75,13 +75,34 @@ def _ensure_para_rtl(paragraph) -> None:
 
 
 def _ensure_para_align_right(paragraph) -> None:
-    """Set Word Align Right (w:jc val=right) on a paragraph."""
+    """Force Align Right so Word's Align Right control is active."""
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
     pPr = paragraph._p.get_or_add_pPr()
     jc = pPr.find(qn("w:jc"))
     if jc is None:
         jc = OxmlElement("w:jc")
         pPr.append(jc)
     jc.set(qn("w:val"), "right")
+    # Drop conflicting indentation that can make RTL text look left-stuck
+    for tag in ("w:ind", "w:framePr"):
+        el = pPr.find(qn(tag))
+        if el is not None:
+            pPr.remove(el)
+
+
+def _ensure_table_rtl(table) -> None:
+    """Mark table as RTL visual so Urdu columns/alignment behave correctly."""
+    tbl = table._tbl
+    tblPr = tbl.tblPr
+    if tblPr is None:
+        tblPr = OxmlElement("w:tblPr")
+        tbl.insert(0, tblPr)
+    if tblPr.find(qn("w:bidiVisual")) is None:
+        # place near start of tblPr
+        bidi = OxmlElement("w:bidiVisual")
+        tblPr.insert(0, bidi)
 
 
 def _ensure_run_rtl(run) -> None:
@@ -134,6 +155,7 @@ def apply_urdu_font(docx_path: Path, font_name: str = URDU_FONT) -> None:
             style_paragraphs([para], force_right=True)
 
     for table in doc.tables:
+        _ensure_table_rtl(table)
         for row in table.rows:
             for cell in row.cells:
                 style_paragraphs(cell.paragraphs, force_right=True)

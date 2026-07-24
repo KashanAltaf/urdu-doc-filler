@@ -162,14 +162,18 @@ def main() -> None:
     set_para_text(doc.paragraphs[5], "{{extra_rows_note}}")
     set_para_text(doc.paragraphs[6], "{{review_heading}}: ")
 
-    # Table 0 — meta (label | value pattern)
+    # Table 0 — match filled Planner layout (wide title cell + date/class/week)
+    # C0 title block | C1 date | C2 تاریخ | C3 class | C4 جماعت | C5 week
     t0 = doc.tables[0]
-    set_cell_lines(t0.rows[0].cells[0], ["{{subject_header}}"])
-    set_cell_lines(t0.rows[0].cells[1], ["{{lesson_title}}", "{{sdg}}"])
+    set_cell_lines(
+        t0.rows[0].cells[0],
+        ["{{subject_header}}", "{{lesson_title}}", "{{sdg}}"],
+    )
+    set_cell_lines(t0.rows[0].cells[1], ["{{date}}"])
     set_cell_lines(t0.rows[0].cells[2], ["{{date_label}}"])
-    set_cell_lines(t0.rows[0].cells[3], ["{{date}}"])
+    set_cell_lines(t0.rows[0].cells[3], ["{{class_value}}"])
     set_cell_lines(t0.rows[0].cells[4], ["{{class_label}}"])
-    set_cell_lines(t0.rows[0].cells[5], ["{{class_value}}", "{{week}}"])
+    set_cell_lines(t0.rows[0].cells[5], ["{{week}}"])
 
     # Table 1 — duration
     set_cell_lines(doc.tables[1].rows[0].cells[0], ["{{club_period}}"])
