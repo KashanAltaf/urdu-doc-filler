@@ -1,0 +1,210 @@
+:root {
+  --ink: #1a2420;
+  --muted: #4a5a52;
+  --paper: #e8efe8;
+  --panel: #f4f7f4;
+  --line: #b7c4bb;
+  --accent: #0f5c4c;
+  --accent-hover: #0a4338;
+  --warn: #8a3b12;
+  --shadow: 0 18px 40px rgba(26, 36, 32, 0.12);
+  --font: "Jameel Noori Nastaleeq", "Jameel Noori Nastaliq", "Noto Nastaliq Urdu", serif;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font);
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 600px at 100% 0%, #d5e4dc 0%, transparent 55%),
+    radial-gradient(900px 500px at 0% 100%, #cfd9d2 0%, transparent 50%),
+    linear-gradient(160deg, #dfe8e2, #c9d5ce);
+  line-height: 1.9;
+}
+
+.page {
+  width: min(880px, calc(100% - 2rem));
+  margin: 0 auto;
+  padding: 2.5rem 0 3rem;
+}
+
+.brand { margin-bottom: 2rem; }
+
+.brand-name {
+  margin: 0;
+  font-size: clamp(2.2rem, 5vw, 3rem);
+  line-height: 1.4;
+}
+
+.brand-sub {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 1.15rem;
+}
+
+.flow { display: grid; gap: 1.25rem; }
+
+.step {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1.25rem 1.35rem 1.4rem;
+  box-shadow: var(--shadow);
+}
+
+.step h2 {
+  margin: 0 0 0.85rem;
+  font-size: 1.45rem;
+  font-weight: 400;
+}
+
+.hint {
+  margin: 0 0 0.85rem;
+  color: var(--muted);
+  font-size: 1.05rem;
+}
+
+.field-grid {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.field label {
+  color: var(--muted);
+  font-size: 1.02rem;
+}
+
+.field input,
+.field textarea,
+.paste {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #fff;
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 1.15rem;
+  padding: 0.5rem 0.75rem;
+  direction: rtl;
+  text-align: right;
+}
+
+.field textarea,
+.paste {
+  resize: vertical;
+  min-height: 4.5rem;
+  line-height: 2;
+}
+
+.field input:focus,
+.field textarea:focus,
+.paste:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, white);
+  border-color: var(--accent);
+}
+
+.activity {
+  border-top: 1px solid var(--line);
+  padding-top: 0.9rem;
+  margin-top: 0.9rem;
+}
+
+.activity:first-child {
+  border-top: none;
+  padding-top: 0;
+  margin-top: 0;
+}
+
+.activity h3 {
+  margin: 0 0 0.55rem;
+  font-size: 1.2rem;
+  font-weight: 400;
+  color: var(--accent);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.primary,
+.ghost {
+  font-family: var(--font);
+  font-size: 1.2rem;
+  border-radius: 3px;
+  padding: 0.5rem 1.2rem;
+  cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease, border-color 160ms ease;
+}
+
+.primary {
+  color: #f7fffb;
+  background: var(--accent);
+  border: none;
+}
+
+.primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ghost {
+  color: var(--accent);
+  background: transparent;
+  border: 1px solid var(--line);
+}
+
+.ghost:hover {
+  border-color: var(--accent);
+  background: var(--paper);
+}
+
+.status {
+  flex-basis: 100%;
+  margin: 0.25rem 0 0;
+  color: var(--muted);
+}
+
+.status.error { color: var(--warn); }
+
+.foot {
+  margin-top: 1.75rem;
+  color: var(--muted);
+  font-size: 1rem;
+}
+
+.paste-main {
+  min-height: 18rem;
+  margin-bottom: 0.85rem;
+}
+
+.inline-actions {
+  margin-top: 0.25rem;
+}
+
+@media (max-width: 560px) {
+  .page {
+    width: min(100% - 1.25rem, 880px);
+    padding-top: 1.5rem;
+  }
+  .step { padding: 1rem; }
+}
+

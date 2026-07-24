@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="ur" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>سبق کا منصوبہ — اردو دستاویز</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="brand">
+      <p class="brand-name">سبق کا منصوبہ</p>
+      <p class="brand-sub">مواد چسپاں کریں — دستاویز خود تیار ہو گی</p>
+    </header>
+
+    <main class="flow">
+      <section class="step" id="pasteSection">
+        <h2>مواد چسپاں کریں</h2>
+        <p class="hint">پورا سبق کا منصوبہ نیچے پیسٹ کریں، پھر دستاویز بنائیں</p>
+        <textarea
+          id="pasteBox"
+          class="paste paste-main"
+          rows="18"
+          spellcheck="false"
+          placeholder="سبق کا منصوبہ (جماعت سوم)
+
+ہفتہ: دوسرا
+سنگل پیریڈ: 40 منٹ
+SDG: SDG 4 – معیاری تعلیم
+سبق کا عنوان: …
+
+تعلیمی مقاصد
+…
+حاصلِ تعلم / کامیابی کا معیار
+…
+وقت	تعلیمی مواد و وسائل	…
+سبق کا جائزہ
+…"
+        ></textarea>
+        <div class="actions inline-actions">
+          <button type="button" id="generateBtn" class="primary" disabled>دستاویز بنائیں اور ڈاؤن لوڈ کریں</button>
+        </div>
+        <p id="generateStatus" class="status" hidden></p>
+      </section>
+    </main>
+
+    <footer class="foot">فونٹ: Jameel Noori Nastaleeq</footer>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>
