@@ -45,10 +45,13 @@ def extract_placeholders(docx_bytes: bytes) -> list[str]:
 
 
 def _set_run_font(run, font_name: str = URDU_FONT, size_pt: float | None = None) -> None:
+    """Set font family only; never alter existing font size unless size_pt is given."""
     if run._element.find(qn("w:drawing")) is not None:
         return
     if not (run.text or "").strip():
         return
+    # Preserve current size before any font API side-effects
+    existing_size = run.font.size
     run.font.name = font_name
     r = run._element
     rPr = r.get_or_add_rPr()
@@ -59,6 +62,9 @@ def _set_run_font(run, font_name: str = URDU_FONT, size_pt: float | None = None)
     rFonts.set(qn("w:eastAsia"), font_name)
     if size_pt is not None:
         run.font.size = Pt(size_pt)
+    elif existing_size is not None and run.font.size != existing_size:
+        run.font.size = existing_size
+
 
 
 def _ensure_para_rtl(paragraph) -> None:

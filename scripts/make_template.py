@@ -1,4 +1,8 @@
-"""Build a docxtpl template from the sample Planner3 document."""
+"""Build a docxtpl template from the sample Planner3 document.
+
+Preserves original paragraph alignment, font size, and run formatting
+from Planner3_24August2026.docx when inserting placeholders.
+"""
 
 from __future__ import annotations
 
@@ -9,7 +13,6 @@ from pathlib import Path
 
 from docx import Document
 from docx.oxml.ns import qn
-from docx.shared import Pt
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "templates" / "Planner3_24August2026.docx"
@@ -20,13 +23,36 @@ MAX_LIST = 8
 MAX_ACT = 8
 
 
-def set_para_text(paragraph, text: str, *, size_pt: float | None = None) -> None:
-    """Replace text runs but keep any inline drawings (e.g. school logo)."""
-    size = None
+def _format_from_paragraph(paragraph):
+    """Clone rPr + size from the best existing text run (prefer non-empty text)."""
+    candidates = []
     for run in paragraph.runs:
-        if run.font.size:
-            size = run.font.size
-            break
+        el = run._element
+        if el.find(qn("w:drawing")) is not None and not (run.text or "").strip():
+            continue
+        candidates.append(run)
+
+    for run in candidates:
+        if (run.text or "").strip():
+            rPr = run._element.find(qn("w:rPr"))
+            return (deepcopy(rPr) if rPr is not None else None), run.font.size
+
+    for run in candidates:
+        rPr = run._element.find(qn("w:rPr"))
+        if rPr is not None:
+            return deepcopy(rPr), run.font.size
+
+    pPr = paragraph._p.find(qn("w:pPr"))
+    if pPr is not None:
+        rPr = pPr.find(qn("w:rPr"))
+        if rPr is not None:
+            return deepcopy(rPr), None
+    return None, None
+
+
+def set_para_text(paragraph, text: str) -> None:
+    """Replace text runs but keep drawings, alignment, and original run formatting."""
+    rPr_clone, size = _format_from_paragraph(paragraph)
 
     p = paragraph._p
     for child in list(p):
@@ -37,25 +63,41 @@ def set_para_text(paragraph, text: str, *, size_pt: float | None = None) -> None
         p.remove(child)
 
     run = paragraph.add_run(text)
-    run.font.name = FONT
-    if size_pt is not None:
-        run.font.size = Pt(size_pt)
-    elif size is not None:
-        run.font.size = size
+    if rPr_clone is not None:
+        existing = run._element.find(qn("w:rPr"))
+        if existing is not None:
+            run._element.remove(existing)
+        run._element.insert(0, rPr_clone)
+    else:
+        run.font.name = FONT
+        if size is not None:
+            run.font.size = size
 
 
-def set_cell_lines(cell, lines: list[str], *, size_pt: float | None = None) -> None:
+def set_cell_lines(cell, lines: list[str]) -> None:
+    """Fill a cell with lines, cloning the first paragraph's formatting for each line."""
+    if not cell.paragraphs:
+        return
+
     while len(cell.paragraphs) > 1:
         p = cell.paragraphs[-1]
         p._element.getparent().remove(p._element)
+
+    first = cell.paragraphs[0]
     if not lines:
-        set_para_text(cell.paragraphs[0], "", size_pt=size_pt)
+        set_para_text(first, "")
         return
-    set_para_text(cell.paragraphs[0], lines[0], size_pt=size_pt)
-    for line in lines[1:]:
-        p = cell.add_paragraph()
-        p.alignment = cell.paragraphs[0].alignment
-        set_para_text(p, line, size_pt=size_pt)
+
+    set_para_text(first, lines[0])
+    anchor = first._p
+    for _ in lines[1:]:
+        clone = deepcopy(anchor)
+        anchor.addnext(clone)
+        anchor = clone
+
+    paras = cell.paragraphs
+    for i, line in enumerate(lines):
+        set_para_text(paras[i], line)
 
 
 def delete_row(table, row_idx: int) -> None:
@@ -167,55 +209,53 @@ def main() -> None:
             for key in ("time", "materials", "assessment", "student", "teacher"):
                 defaults[f"a{i}_{key}"] = ""
 
-    set_para_text(doc.paragraphs[0], "{{school_name}}", size_pt=48)
-    set_para_text(doc.paragraphs[1], "{{plan_title}}", size_pt=18)
-    set_para_text(doc.paragraphs[5], "{{review_heading}}: ", size_pt=14)
+    # Preserve original sizes/alignment — inherit from Planner3 cells
+    set_para_text(doc.paragraphs[0], "{{school_name}}")
+    set_para_text(doc.paragraphs[1], "{{plan_title}}")
+    set_para_text(doc.paragraphs[5], "{{review_heading}}: ")
 
     t0 = doc.tables[0]
     set_cell_lines(
         t0.rows[0].cells[0],
         ["{{subject_header}}", "{{lesson_title}}", "{{sdg}}"],
-        size_pt=14,
     )
-    set_cell_lines(t0.rows[0].cells[1], ["{{date}}"], size_pt=11)
-    set_cell_lines(t0.rows[0].cells[2], ["{{date_label}}"], size_pt=14)
-    set_cell_lines(t0.rows[0].cells[3], ["{{class_value}}"], size_pt=11)
-    set_cell_lines(t0.rows[0].cells[4], ["{{class_label}}"], size_pt=14)
-    set_cell_lines(t0.rows[0].cells[5], ["{{week}}"], size_pt=11)
+    set_cell_lines(t0.rows[0].cells[1], ["{{date}}"])
+    set_cell_lines(t0.rows[0].cells[2], ["{{date_label}}"])
+    set_cell_lines(t0.rows[0].cells[3], ["{{class_value}}"])
+    set_cell_lines(t0.rows[0].cells[4], ["{{class_label}}"])
+    set_cell_lines(t0.rows[0].cells[5], ["{{week}}"])
 
-    set_cell_lines(doc.tables[1].rows[0].cells[0], ["{{club_period}}"], size_pt=14)
+    set_cell_lines(doc.tables[1].rows[0].cells[0], ["{{club_period}}"])
 
     t2 = doc.tables[2]
     set_cell_lines(
         t2.rows[0].cells[0],
         [f"{{{{success_{i}}}}}" for i in range(1, MAX_LIST + 1)],
-        size_pt=14,
     )
-    set_cell_lines(t2.rows[0].cells[1], ["{{outcomes_label}}"], size_pt=14)
+    set_cell_lines(t2.rows[0].cells[1], ["{{outcomes_label}}"])
     set_cell_lines(
         t2.rows[0].cells[2],
         [f"{{{{outcome_{i}}}}}" for i in range(1, MAX_LIST + 1)],
-        size_pt=14,
     )
-    set_cell_lines(t2.rows[0].cells[3], ["{{objectives_label}}"], size_pt=14)
+    set_cell_lines(t2.rows[0].cells[3], ["{{objectives_label}}"])
 
     t3 = doc.tables[3]
-    set_cell_lines(t3.rows[0].cells[0], ["{{col_time}}"], size_pt=14)
-    set_cell_lines(t3.rows[0].cells[1], ["{{col_materials}}"], size_pt=14)
-    set_cell_lines(t3.rows[0].cells[2], ["{{col_assessment}}"], size_pt=14)
-    set_cell_lines(t3.rows[0].cells[3], ["{{col_student}}"], size_pt=14)
-    set_cell_lines(t3.rows[0].cells[4], ["{{col_teacher}}"], size_pt=14)
+    set_cell_lines(t3.rows[0].cells[0], ["{{col_time}}"])
+    set_cell_lines(t3.rows[0].cells[1], ["{{col_materials}}"])
+    set_cell_lines(t3.rows[0].cells[2], ["{{col_assessment}}"])
+    set_cell_lines(t3.rows[0].cells[3], ["{{col_student}}"])
+    set_cell_lines(t3.rows[0].cells[4], ["{{col_teacher}}"])
 
     ensure_data_rows(t3, MAX_ACT)
     for i in range(1, MAX_ACT + 1):
         cells = t3.rows[i].cells
-        set_cell_lines(cells[0], [f"{{{{a{i}_time}}}}"], size_pt=11)
-        set_cell_lines(cells[1], [f"{{{{a{i}_materials}}}}"], size_pt=11)
-        set_cell_lines(cells[2], [f"{{{{a{i}_assessment}}}}"], size_pt=11)
-        set_cell_lines(cells[3], [f"{{{{a{i}_student}}}}"], size_pt=11)
-        set_cell_lines(cells[4], [f"{{{{a{i}_teacher}}}}"], size_pt=11)
+        set_cell_lines(cells[0], [f"{{{{a{i}_time}}}}"])
+        set_cell_lines(cells[1], [f"{{{{a{i}_materials}}}}"])
+        set_cell_lines(cells[2], [f"{{{{a{i}_assessment}}}}"])
+        set_cell_lines(cells[3], [f"{{{{a{i}_student}}}}"])
+        set_cell_lines(cells[4], [f"{{{{a{i}_teacher}}}}"])
 
-    set_cell_lines(doc.tables[4].rows[0].cells[0], ["{{review_body}}"], size_pt=18)
+    set_cell_lines(doc.tables[4].rows[0].cells[0], ["{{review_body}}"])
 
     doc.save(str(DST))
     DEFAULTS.write_text(json.dumps(defaults, ensure_ascii=False, indent=2), encoding="utf-8")
