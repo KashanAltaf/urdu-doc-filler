@@ -101,19 +101,12 @@ def delete_row(table, row_idx: int) -> None:
 
 
 def ensure_activity_data_rows(table, count: int) -> None:
-    """Keep header (0) + prompt (1); ensure `count` blank data rows from index 2."""
-    # Need 2 + count rows total
-    target = 2 + count
+    """Keep header row 0; ensure `count` blank data rows from index 1."""
+    target = 1 + count
     while len(table.rows) > target:
         delete_row(table, len(table.rows) - 1)
     while len(table.rows) < target:
-        # Clone last data row (or prompt row if no data yet)
-        src_idx = len(table.rows) - 1 if len(table.rows) > 2 else 2
-        if len(table.rows) <= 2:
-            # clone prompt row structure then clear — prefer empty data row if exists
-            table._tbl.append(deepcopy(table.rows[1]._tr))
-        else:
-            table._tbl.append(deepcopy(table.rows[-1]._tr))
+        table._tbl.append(deepcopy(table.rows[-1]._tr))
 
 
 def main() -> None:
@@ -198,12 +191,16 @@ def main() -> None:
     set_cell_lines(t3.rows[0].cells[2], ["{{col_student}}"])
     set_cell_lines(t3.rows[0].cells[3], ["{{col_assessment}}"])
     set_cell_lines(t3.rows[0].cells[4], ["{{col_materials}}"])
-    # Row 1 = instructional prompts — leave unchanged (form design)
+
+    # Remove instructional prompt row (old row 1) if present
+    if len(t3.rows) > 1:
+        prompt_text = t3.rows[1].cells[1].text if len(t3.rows[1].cells) > 1 else ""
+        if "کیسے سمجھائیں" in prompt_text or "سیکھنے کی پیش رفت" in prompt_text:
+            delete_row(t3, 1)
 
     ensure_activity_data_rows(t3, MAX_ACT)
-    # Clear/fill data rows starting at index 2
     for i in range(1, MAX_ACT + 1):
-        row = t3.rows[i + 1]  # skip header + prompt
+        row = t3.rows[i]  # row 0 = header; data starts at 1
         # New form: time | teacher | student | assessment | materials
         set_cell_lines(row.cells[0], [f"{{{{a{i}_time}}}}"])
         set_cell_lines(row.cells[1], [f"{{{{a{i}_teacher}}}}"])
