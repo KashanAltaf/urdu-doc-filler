@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 import uuid
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -17,14 +20,21 @@ from app.lesson_parse import (
 )
 
 ROOT = Path(__file__).resolve().parent.parent
-UPLOADS = ROOT / "uploads"
-OUTPUTS = ROOT / "outputs"
+
+# On Vercel the filesystem is read-only except /tmp
+if os.environ.get("VERCEL"):
+    WORK = Path(tempfile.gettempdir()) / "urdu-doc-filler"
+else:
+    WORK = ROOT
+
+UPLOADS = WORK / "uploads"
+OUTPUTS = WORK / "outputs"
 STATIC = ROOT / "app" / "static"
 DEFAULT_TEMPLATE = ROOT / "templates" / "lesson_plan_template.docx"
 DEFAULT_VALUES = ROOT / "app" / "default_values.json"
 
-UPLOADS.mkdir(exist_ok=True)
-OUTPUTS.mkdir(exist_ok=True)
+UPLOADS.mkdir(parents=True, exist_ok=True)
+OUTPUTS.mkdir(parents=True, exist_ok=True)
 
 app = FastAPI(title="Urdu Doc Filler")
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
@@ -94,7 +104,7 @@ async def generate(
     token: str = Form(...),
     content: str = Form(""),
     fields_json: str = Form(""),
-) -> FileResponse:
+) -> Response:
     if token == "default":
         template_path = DEFAULT_TEMPLATE
     else:
@@ -126,9 +136,18 @@ async def generate(
     out_name = f"filled-{uuid.uuid4().hex[:8]}.docx"
     out_path = OUTPUTS / out_name
     fill_template(template_path.read_bytes(), context, out_path)
+    data = out_path.read_bytes()
+    try:
+        out_path.unlink(missing_ok=True)
+    except OSError:
+        pass
 
-    return FileResponse(
-        path=str(out_path),
-        filename="بھرا_ہوا_دستاویز.docx",
+    filename = "بھرا_ہوا_دستاویز.docx"
+    encoded = quote(filename)
+    return Response(
+        content=data,
         media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded}",
+        },
     )
