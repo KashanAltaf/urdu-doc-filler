@@ -74,6 +74,16 @@ def _ensure_para_rtl(paragraph) -> None:
         pPr.append(OxmlElement("w:bidi"))
 
 
+def _ensure_para_align_right(paragraph) -> None:
+    """Set Word Align Right (w:jc val=right) on a paragraph."""
+    pPr = paragraph._p.get_or_add_pPr()
+    jc = pPr.find(qn("w:jc"))
+    if jc is None:
+        jc = OxmlElement("w:jc")
+        pPr.append(jc)
+    jc.set(qn("w:val"), "right")
+
+
 def _ensure_run_rtl(run) -> None:
     """Mark a text run as RTL complex-script."""
     if run._element.find(qn("w:drawing")) is not None:
@@ -86,12 +96,15 @@ def _ensure_run_rtl(run) -> None:
 
 
 def apply_urdu_font(docx_path: Path, font_name: str = URDU_FONT) -> None:
-    """Force Jameel Noori Nastaleeq on body text runs (never touch headers)."""
+    """Force Urdu font, RTL, and right-align (except school name / logo)."""
     doc = Document(str(docx_path))
 
-    def style_paragraphs(paragraphs) -> None:
+    # First body paragraph = school name + logo — keep centered
+    def style_paragraphs(paragraphs, *, force_right: bool) -> None:
         for para in paragraphs:
             _ensure_para_rtl(para)
+            if force_right:
+                _ensure_para_align_right(para)
             for run in para.runs:
                 if run._element.find(qn("w:drawing")) is not None:
                     continue
@@ -100,11 +113,31 @@ def apply_urdu_font(docx_path: Path, font_name: str = URDU_FONT) -> None:
                 _set_run_font(run, font_name)
                 _ensure_run_rtl(run)
 
-    style_paragraphs(doc.paragraphs)
+    for idx, para in enumerate(doc.paragraphs):
+        if idx == 0:
+            # Logo + school name: keep center alignment
+            _ensure_para_rtl(para)
+            pPr = para._p.get_or_add_pPr()
+            jc = pPr.find(qn("w:jc"))
+            if jc is None:
+                jc = OxmlElement("w:jc")
+                pPr.append(jc)
+            jc.set(qn("w:val"), "center")
+            for run in para.runs:
+                if run._element.find(qn("w:drawing")) is not None:
+                    continue
+                if not (run.text or "").strip():
+                    continue
+                _set_run_font(run, font_name)
+                _ensure_run_rtl(run)
+        else:
+            style_paragraphs([para], force_right=True)
+
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
-                style_paragraphs(cell.paragraphs)
+                style_paragraphs(cell.paragraphs, force_right=True)
+
 
     for section in doc.sections:
         sectPr = section._sectPr
@@ -113,6 +146,7 @@ def apply_urdu_font(docx_path: Path, font_name: str = URDU_FONT) -> None:
 
     doc.save(str(docx_path))
     restore_original_headers(docx_path)
+
 
 
 def restore_original_headers(docx_path: Path) -> None:
