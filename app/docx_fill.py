@@ -74,18 +74,11 @@ def _ensure_para_rtl(paragraph) -> None:
         pPr.append(OxmlElement("w:bidi"))
 
 
-def _center_to_right(paragraph) -> None:
-    """If Align Center is active, switch to Align Right only."""
+def _set_align_right(paragraph) -> None:
+    """Select Word Paragraph → Align Right (Ctrl+R)."""
     from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-    pPr = paragraph._p.get_or_add_pPr()
-    jc = pPr.find(qn("w:jc"))
-    if jc is not None and jc.get(qn("w:val")) == "center":
-        jc.set(qn("w:val"), "right")
-        return
-    # Style may imply center without local jc
-    if paragraph.alignment == WD_ALIGN_PARAGRAPH.CENTER:
-        paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    paragraph.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
 
 def _ensure_run_rtl(run) -> None:
@@ -100,14 +93,14 @@ def _ensure_run_rtl(run) -> None:
 
 
 def apply_urdu_font(docx_path: Path, font_name: str = URDU_FONT) -> None:
-    """Apply Urdu font + RTL. Only change Align Center → Align Right (not school name)."""
+    """Apply Urdu font + RTL. Align Right everywhere except school name/logo."""
     doc = Document(str(docx_path))
 
-    def style_paragraphs(paragraphs, *, fix_center: bool) -> None:
+    def style_paragraphs(paragraphs, *, align_right: bool) -> None:
         for para in paragraphs:
             _ensure_para_rtl(para)
-            if fix_center:
-                _center_to_right(para)
+            if align_right:
+                _set_align_right(para)
             for run in para.runs:
                 if run._element.find(qn("w:drawing")) is not None:
                     continue
@@ -117,13 +110,13 @@ def apply_urdu_font(docx_path: Path, font_name: str = URDU_FONT) -> None:
                 _ensure_run_rtl(run)
 
     for idx, para in enumerate(doc.paragraphs):
-        # Keep school name / logo paragraph as-is (usually center)
-        style_paragraphs([para], fix_center=(idx != 0))
+        # idx 0 = school name + logo — leave alignment (center)
+        style_paragraphs([para], align_right=(idx != 0))
 
     for table in doc.tables:
         for row in table.rows:
             for cell in row.cells:
-                style_paragraphs(cell.paragraphs, fix_center=True)
+                style_paragraphs(cell.paragraphs, align_right=True)
 
     for section in doc.sections:
         sectPr = section._sectPr
