@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 from urllib.parse import quote
 
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -18,8 +19,10 @@ from app.lesson_parse import (
     looks_like_lesson_paste,
     parse_lesson_paste,
 )
+from app.rag import build_index, chunk_text, extract_text, generate_fields, retrieve
 
 ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT / ".env")
 
 # On Vercel the filesystem is read-only except /tmp
 if os.environ.get("VERCEL"):
@@ -36,6 +39,21 @@ DEFAULT_VALUES = ROOT / "app" / "default_values.json"
 UPLOADS.mkdir(parents=True, exist_ok=True)
 OUTPUTS.mkdir(parents=True, exist_ok=True)
 
+LOCKED_HEADING_KEYS = (
+    "subject_header",
+    "date_label",
+    "class_label",
+    "outcomes_label",
+    "objectives_label",
+    "col_time",
+    "col_teacher",
+    "col_student",
+    "col_assessment",
+    "col_materials",
+    "extra_rows_note",
+    "review_heading",
+)
+
 app = FastAPI(title="Urdu Doc Filler")
 app.mount("/static", StaticFiles(directory=str(STATIC)), name="static")
 
@@ -49,6 +67,29 @@ def _load_defaults() -> dict:
         return json.loads(DEFAULT_VALUES.read_text(encoding="utf-8"))
     return {}
 
+
+def _apply_locked_headings(context: dict, defaults: dict) -> dict:
+    for key in LOCKED_HEADING_KEYS:
+        if key in defaults:
+            context[key] = defaults[key]
+    return context
+
+
+def _docx_response(path: Path) -> Response:
+    data = path.read_bytes()
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+    filename = "بھرا_ہوا_دستاویز.docx"
+    encoded = quote(filename)
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded}",
+        },
+    )
 
 @app.get("/", response_class=HTMLResponse)
 async def index() -> HTMLResponse:
@@ -132,41 +173,69 @@ async def generate(
     elif looks_like_lesson_paste(content):
         context.update(parse_lesson_paste(content))
 
-    # Headings always from the 2026 form defaults
-    for key in (
-        "subject_header",
-        "date_label",
-        "class_label",
-        "outcomes_label",
-        "objectives_label",
-        "col_time",
-        "col_teacher",
-        "col_student",
-        "col_assessment",
-        "col_materials",
-        "extra_rows_note",
-        "review_heading",
-    ):
-        if key in defaults:
-            context[key] = defaults[key]
-
+    context = _apply_locked_headings(context, defaults)
     context = context_from_flat_fields(context)
 
     out_name = f"filled-{uuid.uuid4().hex[:8]}.docx"
     out_path = OUTPUTS / out_name
     fill_template(template_path.read_bytes(), context, out_path)
-    data = out_path.read_bytes()
-    try:
-        out_path.unlink(missing_ok=True)
-    except OSError:
-        pass
+    return _docx_response(out_path)
 
-    filename = "بھرا_ہوا_دستاویز.docx"
-    encoded = quote(filename)
-    return Response(
-        content=data,
-        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        headers={
-            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded}",
-        },
-    )
+
+@app.post("/api/rag-generate")
+async def rag_generate(
+    prompt: str = Form(...),
+    file: UploadFile = File(...),
+) -> Response:
+    """Upload a PDF/DOCX book + prompt → Gemini RAG → filled lesson-plan .docx."""
+    if not DEFAULT_TEMPLATE.exists():
+        raise HTTPException(status_code=404, detail="پہلے سے طے شدہ ٹیمپلیٹ نہیں ملا۔")
+
+    prompt = (prompt or "").strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="پرامپٹ خالی ہے۔")
+
+    filename = file.filename or ""
+    lower = filename.lower()
+    if not (lower.endswith(".pdf") or lower.endswith(".docx")):
+        raise HTTPException(status_code=400, detail="صرف PDF یا DOCX فائلیں قبول ہیں۔")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status_code=400, detail="فائل خالی ہے۔")
+
+    # Cap upload size (~12 MB) for free-tier practicality
+    if len(data) > 12 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="فائل بہت بڑی ہے (حد ۱۲ میگابائٹ)۔")
+
+    try:
+        book_text = extract_text(filename, data)
+        chunks = chunk_text(book_text)
+        if not chunks:
+            raise ValueError("کتاب سے متن نہیں نکلا۔ اسکین شدہ PDF ہو تو پہلے OCR کریں۔")
+        # Limit chunks for free-tier embedding quota
+        if len(chunks) > 80:
+            chunks = chunks[:80]
+        index = build_index(chunks)
+        hits = retrieve(index, prompt, top_k=6)
+        fields = generate_fields(user_prompt=prompt, retrieved_chunks=hits)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=500,
+            detail=f"RAG ناکام: {exc}",
+        ) from exc
+
+    defaults = _load_defaults()
+    context: dict = dict(defaults)
+    context.update(fields)
+    context = _apply_locked_headings(context, defaults)
+    context = context_from_flat_fields(context)
+
+    out_name = f"rag-{uuid.uuid4().hex[:8]}.docx"
+    out_path = OUTPUTS / out_name
+    fill_template(DEFAULT_TEMPLATE.read_bytes(), context, out_path)
+    return _docx_response(out_path)

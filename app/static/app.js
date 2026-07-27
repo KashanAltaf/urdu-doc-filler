@@ -1,10 +1,8 @@
 (() => {
-  const pasteBox = document.getElementById("pasteBox");
+  const bookFile = document.getElementById("bookFile");
+  const promptBox = document.getElementById("promptBox");
   const generateBtn = document.getElementById("generateBtn");
   const generateStatus = document.getElementById("generateStatus");
-
-  let token = null;
-  let defaults = {};
 
   function show(message, isError = false) {
     generateStatus.hidden = false;
@@ -12,53 +10,35 @@
     generateStatus.classList.toggle("error", isError);
   }
 
-  async function boot() {
-    try {
-      const res = await fetch("/api/form");
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || "لوڈ نہیں ہوا");
-      token = data.token;
-      defaults = data.defaults || {};
-      generateBtn.disabled = false;
-    } catch (err) {
-      show(err.message || "خرابی", true);
-    }
-  }
-
   async function generate() {
-    if (!token) return;
-    const content = pasteBox.value.trim();
-    if (!content) {
-      show("پہلے مواد چسپاں کریں۔", true);
+    const file = bookFile.files && bookFile.files[0];
+    const prompt = (promptBox.value || "").trim();
+
+    if (!file) {
+      show("پہلے کتاب (PDF یا DOCX) اپ لوڈ کریں۔", true);
+      return;
+    }
+    if (!prompt) {
+      show("پرامپٹ لکھیں۔", true);
       return;
     }
 
-    show("مواد میپ ہو رہا ہے اور دستاویز تیار ہو رہی ہے…");
+    show("کتاب پڑھ رہے ہیں، متعلقہ حصے ڈھونڈ رہے ہیں، اور سبق منصوبہ بنا رہے ہیں…");
     generateBtn.disabled = true;
 
     try {
-      const parseRes = await fetch("/api/parse", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
-      });
-      const parsed = await parseRes.json();
-      if (!parseRes.ok) throw new Error(parsed.detail || "میپنگ ناکام");
-
-      const fields = { ...defaults, ...parsed.fields };
       const body = new FormData();
-      body.append("token", token);
-      body.append("content", "");
-      body.append("fields_json", JSON.stringify(fields));
+      body.append("prompt", prompt);
+      body.append("file", file, file.name);
 
-      const res = await fetch("/api/generate", { method: "POST", body });
+      const res = await fetch("/api/rag-generate", { method: "POST", body });
       if (!res.ok) {
         let detail = "تیاری ناکام";
         try {
           const data = await res.json();
           detail = data.detail || detail;
         } catch (_) {}
-        throw new Error(detail);
+        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
       }
 
       const blob = await res.blob();
@@ -74,10 +54,9 @@
     } catch (err) {
       show(err.message || "خرابی", true);
     } finally {
-      generateBtn.disabled = !token;
+      generateBtn.disabled = false;
     }
   }
 
   generateBtn.addEventListener("click", generate);
-  boot();
 })();

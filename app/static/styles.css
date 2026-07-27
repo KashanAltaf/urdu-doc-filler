@@ -192,12 +192,30 @@ body {
 }
 
 .paste-main {
-  min-height: 18rem;
+  min-height: 10rem;
   margin-bottom: 0.85rem;
 }
 
 .inline-actions {
   margin-top: 0.25rem;
+}
+
+.field input[type="file"] {
+  padding: 0.55rem 0.4rem;
+  background: #fff;
+  cursor: pointer;
+}
+
+.api-hint {
+  margin-top: 0.85rem;
+  font-size: 0.98rem;
+}
+
+.api-hint code {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 0.9em;
+  direction: ltr;
+  unicode-bidi: isolate;
 }
 
 @media (max-width: 560px) {

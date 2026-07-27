@@ -3,48 +3,46 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>سبق کا منصوبہ — اردو دستاویز</title>
+  <title>سبق کا منصوبہ — RAG</title>
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
   <div class="page">
     <header class="brand">
       <p class="brand-name">سبق کا منصوبہ</p>
-      <p class="brand-sub">مواد چسپاں کریں — دستاویز خود تیار ہو گی</p>
+      <p class="brand-sub">کتاب اپ لوڈ کریں + پرامپٹ لکھیں — دستاویز خود تیار ہو گی</p>
     </header>
 
     <main class="flow">
-      <section class="step" id="pasteSection">
-        <h2>مواد چسپاں کریں</h2>
-        <p class="hint">پورا سبق کا منصوبہ نیچے پیسٹ کریں، پھر دستاویز بنائیں</p>
-        <textarea
-          id="pasteBox"
-          class="paste paste-main"
-          rows="18"
-          spellcheck="false"
-          placeholder="سبق کا منصوبہ (جماعت سوم)
+      <section class="step" id="ragSection">
+        <h2>کتاب اور پرامپٹ</h2>
+        <p class="hint">PDF یا DOCX کتاب اپ لوڈ کریں، پھر بتائیں کون سا سبق بنانا ہے</p>
 
-ہفتہ: دوسرا
-سنگل پیریڈ: 40 منٹ
-SDG: SDG 4 – معیاری تعلیم
-سبق کا عنوان: …
+        <div class="field">
+          <label for="bookFile">کتاب (PDF / DOCX)</label>
+          <input type="file" id="bookFile" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+        </div>
 
-تعلیمی مقاصد
-…
-حاصلِ تعلم / کامیابی کا معیار
-…
-وقت	تعلیمی مواد و وسائل	…
-سبق کا جائزہ
-…"
-        ></textarea>
+        <div class="field" style="margin-top: 0.85rem">
+          <label for="promptBox">پرامپٹ</label>
+          <textarea
+            id="promptBox"
+            class="paste paste-main"
+            rows="8"
+            spellcheck="false"
+            placeholder="مثال: جماعت سوم کے لیے سبق «ہماری زمین» کا مکمل سبق منصوبہ بنائیں، ہفتہ دوسرا، سنگل پیریڈ 40 منٹ، SDG 4۔"
+          ></textarea>
+        </div>
+
         <div class="actions inline-actions">
-          <button type="button" id="generateBtn" class="primary" disabled>دستاویز بنائیں اور ڈاؤن لوڈ کریں</button>
+          <button type="button" id="generateBtn" class="primary">دستاویز بنائیں اور ڈاؤن لوڈ کریں</button>
         </div>
         <p id="generateStatus" class="status" hidden></p>
+        <p class="hint api-hint">مفت Gemini API: <code>GEMINI_API_KEY</code> فائل <code>.env</code> میں رکھیں</p>
       </section>
     </main>
 
-    <footer class="foot">فونٹ: Jameel Noori Nastaleeq</footer>
+    <footer class="foot">فونٹ: Jameel Noori Nastaleeq · ماڈل: Google Gemini (مفت)</footer>
   </div>
   <script src="/static/app.js"></script>
 </body>
