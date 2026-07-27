@@ -3,46 +3,61 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>سبق کا منصوبہ — RAG</title>
+  <title>سبق کا منصوبہ</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu:wght@400;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
   <div class="page">
     <header class="brand">
       <p class="brand-name">سبق کا منصوبہ</p>
-      <p class="brand-sub">کتاب اپ لوڈ کریں + پرامپٹ لکھیں — دستاویز خود تیار ہو گی</p>
+      <p class="brand-sub">کتاب، تاریخ، اور پرامپٹ — پھر دستاویز تیار کریں</p>
     </header>
 
-    <main class="flow">
-      <section class="step" id="ragSection">
-        <h2>کتاب اور پرامپٹ</h2>
-        <p class="hint">PDF یا DOCX کتاب اپ لوڈ کریں، پھر بتائیں کون سا سبق بنانا ہے</p>
-
-        <div class="field">
-          <label for="bookFile">کتاب (PDF / DOCX)</label>
-          <input type="file" id="bookFile" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" />
+    <main class="composer" aria-label="سبق منصوبہ فارم">
+      <div class="upload-zone" id="uploadZone">
+        <input
+          type="file"
+          id="bookFile"
+          class="upload-input"
+          accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        />
+        <div class="upload-visual" aria-hidden="true">
+          <span class="upload-mark"></span>
         </div>
-
-        <div class="field" style="margin-top: 0.85rem">
-          <label for="promptBox">پرامپٹ</label>
-          <textarea
-            id="promptBox"
-            class="paste paste-main"
-            rows="8"
-            spellcheck="false"
-            placeholder="مثال: جماعت سوم کے لیے سبق «ہماری زمین» کا مکمل سبق منصوبہ بنائیں، ہفتہ دوسرا، سنگل پیریڈ 40 منٹ، SDG 4۔"
-          ></textarea>
+        <div class="upload-copy">
+          <p class="upload-title">دستاویز اپ لوڈ کریں</p>
+          <p class="upload-hint">PDF یا DOCX یہاں چھوڑیں، یا منتخب کریں</p>
+          <p class="upload-file" id="fileName" hidden></p>
         </div>
+      </div>
 
-        <div class="actions inline-actions">
-          <button type="button" id="generateBtn" class="primary">دستاویز بنائیں اور ڈاؤن لوڈ کریں</button>
-        </div>
+      <div class="meta-row">
+        <label class="date-field" for="lessonDate">
+          <span class="field-label">تاریخ</span>
+          <input type="date" id="lessonDate" />
+        </label>
+      </div>
+
+      <label class="prompt-field" for="promptBox">
+        <span class="field-label">پرامپٹ</span>
+        <textarea
+          id="promptBox"
+          rows="5"
+          spellcheck="false"
+          placeholder="جماعت، سبق کا عنوان، ہفتہ، یا جو کچھ چاہیے لکھیں…"
+        ></textarea>
+      </label>
+
+      <div class="actions">
+        <button type="button" id="generateBtn" class="primary">دستاویز بنائیں</button>
         <p id="generateStatus" class="status" hidden></p>
-        <p class="hint api-hint">مفت Gemini API: <code>GEMINI_API_KEY</code> فائل <code>.env</code> میں رکھیں</p>
-      </section>
+      </div>
     </main>
 
-    <footer class="foot">فونٹ: Jameel Noori Nastaleeq · ماڈل: Google Gemini (مفت)</footer>
+    <footer class="foot">Jameel Noori Nastaleeq · Gemini</footer>
   </div>
   <script src="/static/app.js"></script>
 </body>

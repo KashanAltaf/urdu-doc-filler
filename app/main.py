@@ -186,6 +186,7 @@ async def generate(
 async def rag_generate(
     prompt: str = Form(...),
     file: UploadFile = File(...),
+    date: str = Form(""),
 ) -> Response:
     """Upload a PDF/DOCX book + prompt → Gemini RAG → filled lesson-plan .docx."""
     if not DEFAULT_TEMPLATE.exists():
@@ -194,6 +195,9 @@ async def rag_generate(
     prompt = (prompt or "").strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="پرامپٹ خالی ہے۔")
+    date = (date or "").strip()
+    if date:
+        prompt = f"{prompt}\n\nتاریخ: {date}"
 
     filename = file.filename or ""
     lower = filename.lower()
@@ -232,6 +236,8 @@ async def rag_generate(
     defaults = _load_defaults()
     context: dict = dict(defaults)
     context.update(fields)
+    if date:
+        context["date"] = date
     context = _apply_locked_headings(context, defaults)
     context = context_from_flat_fields(context)
 
