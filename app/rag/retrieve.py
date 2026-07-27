@@ -25,9 +25,15 @@ def _client():
     return genai.Client(api_key=api_key)
 
 
-def embed_texts(texts: list[str], *, model: str = "text-embedding-004") -> np.ndarray:
+def embed_texts(
+    texts: list[str],
+    *,
+    model: str | None = None,
+) -> np.ndarray:
     if not texts:
         return np.zeros((0, 0), dtype=np.float32)
+    # text-embedding-004 was shut down; use current Gemini embedding model
+    model = model or os.environ.get("GEMINI_EMBED_MODEL", "gemini-embedding-2")
     client = _client()
     vectors: list[list[float]] = []
 
@@ -45,19 +51,35 @@ def embed_texts(texts: list[str], *, model: str = "text-embedding-004") -> np.nd
             return [list(values if values is not None else emb)]
         raise RuntimeError("Embedding جواب درست نہیں۔")
 
+    def _embed_once(contents):
+        try:
+            return client.models.embed_content(model=model, contents=contents)
+        except Exception as first:
+            fallback = (
+                "gemini-embedding-001"
+                if model != "gemini-embedding-001"
+                else "gemini-embedding-2"
+            )
+            if fallback == model:
+                raise first
+            try:
+                return client.models.embed_content(model=fallback, contents=contents)
+            except Exception:
+                raise first
+
     # Prefer small batches; fall back to one-by-one if batch shape differs
     batch_size = 8
     for i in range(0, len(texts), batch_size):
         batch = texts[i : i + batch_size]
         try:
-            result = client.models.embed_content(model=model, contents=batch)
+            result = _embed_once(batch)
             got = _values_from_response(result)
             if len(got) != len(batch):
                 raise RuntimeError("batch size mismatch")
             vectors.extend(got)
         except Exception:
             for item in batch:
-                result = client.models.embed_content(model=model, contents=item)
+                result = _embed_once(item)
                 vectors.extend(_values_from_response(result))
 
     arr = np.array(vectors, dtype=np.float32)
