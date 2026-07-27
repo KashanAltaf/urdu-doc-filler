@@ -7,12 +7,14 @@
   const generateBtn = document.getElementById("generateBtn");
   const generateStatus = document.getElementById("generateStatus");
 
-  // Default to today
+  const MAX_TEXT_CHARS = 160000;
+
   const today = new Date();
-  const yyyy = today.getFullYear();
-  const mm = String(today.getMonth() + 1).padStart(2, "0");
-  const dd = String(today.getDate()).padStart(2, "0");
-  lessonDate.value = `${yyyy}-${mm}-${dd}`;
+  lessonDate.value = [
+    today.getFullYear(),
+    String(today.getMonth() + 1).padStart(2, "0"),
+    String(today.getDate()).padStart(2, "0"),
+  ].join("-");
 
   function show(message, isError = false) {
     generateStatus.hidden = false;
@@ -43,13 +45,11 @@
     dt.items.add(file);
     bookFile.files = dt.files;
     setFileLabel(file);
-    show("", false);
     generateStatus.hidden = true;
   }
 
   bookFile.addEventListener("change", () => {
-    const file = bookFile.files && bookFile.files[0];
-    setFileLabel(file || null);
+    setFileLabel((bookFile.files && bookFile.files[0]) || null);
   });
 
   ["dragenter", "dragover"].forEach((evt) => {
@@ -78,6 +78,95 @@
     return `${d}/${m}/${y}`;
   }
 
+  function ensurePdfJs() {
+    if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+      script.onload = () => {
+        if (!window.pdfjsLib) {
+          reject(new Error("PDF لائبریری لوڈ نہیں ہوئی"));
+          return;
+        }
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        resolve(window.pdfjsLib);
+      };
+      script.onerror = () => reject(new Error("PDF لائبریری لوڈ نہیں ہوئی"));
+      document.head.appendChild(script);
+    });
+  }
+
+  function ensureMammoth() {
+    if (window.mammoth) return Promise.resolve(window.mammoth);
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.8.0/mammoth.browser.min.js";
+      script.onload = () => {
+        if (!window.mammoth) {
+          reject(new Error("DOCX لائبریری لوڈ نہیں ہوئی"));
+          return;
+        }
+        resolve(window.mammoth);
+      };
+      script.onerror = () => reject(new Error("DOCX لائبریری لوڈ نہیں ہوئی"));
+      document.head.appendChild(script);
+    });
+  }
+
+  async function extractPdfText(file) {
+    const pdfjsLib = await ensurePdfJs();
+    const buffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: buffer }).promise;
+    const parts = [];
+    for (let i = 1; i <= pdf.numPages; i += 1) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items.map((item) => item.str).join(" ").trim();
+      if (pageText) parts.push(`[صفحہ ${i}]\n${pageText}`);
+      if (parts.join("\n\n").length > MAX_TEXT_CHARS) break;
+    }
+    return parts.join("\n\n").trim();
+  }
+
+  async function extractDocxText(file) {
+    const mammoth = await ensureMammoth();
+    const buffer = await file.arrayBuffer();
+    const result = await mammoth.extractRawText({ arrayBuffer: buffer });
+    return (result.value || "").trim();
+  }
+
+  async function extractBookText(file) {
+    const name = (file.name || "").toLowerCase();
+    let text = "";
+    if (name.endsWith(".pdf")) text = await extractPdfText(file);
+    else if (name.endsWith(".docx")) text = await extractDocxText(file);
+    else throw new Error("صرف PDF یا DOCX فائلیں قبول ہیں۔");
+
+    if (!text) {
+      throw new Error("کتاب سے متن نہیں نکلا۔ اسکین شدہ PDF ہو تو پہلے OCR کریں۔");
+    }
+    if (text.length > MAX_TEXT_CHARS) {
+      text = text.slice(0, MAX_TEXT_CHARS);
+    }
+    return text;
+  }
+
+  async function readError(res) {
+    const raw = await res.text();
+    if (!raw) return "تیاری ناکام";
+    try {
+      const data = JSON.parse(raw);
+      const detail = data.detail || data.error || data.message;
+      if (typeof detail === "string") return detail;
+      if (detail) return JSON.stringify(detail);
+    } catch (_) {}
+    if (/FUNCTION_PAYLOAD_TOO_LARGE|Request Entity Too Large/i.test(raw)) {
+      return "فائل بہت بڑی ہے۔ اب متن براؤزر میں نکالا جاتا ہے — صفحہ ریفریش کر کے دوبارہ کوشش کریں۔";
+    }
+    return raw.slice(0, 240);
+  }
+
   async function generate() {
     const file = bookFile.files && bookFile.files[0];
     const prompt = (promptBox.value || "").trim();
@@ -92,24 +181,21 @@
       return;
     }
 
-    show("دستاویز تیار ہو رہی ہے…");
+    show("کتاب سے متن نکال رہے ہیں…");
     generateBtn.disabled = true;
 
     try {
+      const bookText = await extractBookText(file);
+      show("سبق منصوبہ تیار ہو رہا ہے…");
+
+      // Text only — avoids Vercel FUNCTION_PAYLOAD_TOO_LARGE on big PDFs
       const body = new FormData();
       body.append("prompt", prompt);
-      body.append("file", file, file.name);
+      body.append("book_text", bookText);
       if (date) body.append("date", formatDateForDoc(date));
 
       const res = await fetch("/api/rag-generate", { method: "POST", body });
-      if (!res.ok) {
-        let detail = "تیاری ناکام";
-        try {
-          const data = await res.json();
-          detail = data.detail || detail;
-        } catch (_) {}
-        throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
-      }
+      if (!res.ok) throw new Error(await readError(res));
 
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);

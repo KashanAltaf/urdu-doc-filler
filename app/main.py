@@ -185,39 +185,60 @@ async def generate(
 @app.post("/api/rag-generate")
 async def rag_generate(
     prompt: str = Form(...),
-    file: UploadFile = File(...),
     date: str = Form(""),
+    book_text: str = Form(""),
+    file: UploadFile | None = File(None),
 ) -> Response:
-    """Upload a PDF/DOCX book + prompt → Gemini RAG → filled lesson-plan .docx."""
+    """
+    Build a lesson plan from book text + prompt.
+
+    Prefer `book_text` (extracted in the browser) so Vercel stays under
+    the ~4.5MB request body limit. Optional `file` still works locally.
+    """
     if not DEFAULT_TEMPLATE.exists():
         raise HTTPException(status_code=404, detail="پہلے سے طے شدہ ٹیمپلیٹ نہیں ملا۔")
 
     prompt = (prompt or "").strip()
     if not prompt:
         raise HTTPException(status_code=400, detail="پرامپٹ خالی ہے۔")
+
     date = (date or "").strip()
     if date:
         prompt = f"{prompt}\n\nتاریخ: {date}"
 
-    filename = file.filename or ""
-    lower = filename.lower()
-    if not (lower.endswith(".pdf") or lower.endswith(".docx")):
-        raise HTTPException(status_code=400, detail="صرف PDF یا DOCX فائلیں قبول ہیں۔")
+    text = (book_text or "").strip()
+    if not text and file is not None and file.filename:
+        filename = file.filename or ""
+        lower = filename.lower()
+        if not (lower.endswith(".pdf") or lower.endswith(".docx")):
+            raise HTTPException(status_code=400, detail="صرف PDF یا DOCX فائلیں قبول ہیں۔")
+        data = await file.read()
+        if not data:
+            raise HTTPException(status_code=400, detail="فائل خالی ہے۔")
+        if len(data) > 4 * 1024 * 1024:
+            raise HTTPException(
+                status_code=400,
+                detail="فائل بہت بڑی ہے۔ براؤزر میں متن نکال کر بھیجیں، یا چھوٹی فائل استعمال کریں۔",
+            )
+        try:
+            text = extract_text(filename, data)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    data = await file.read()
-    if not data:
-        raise HTTPException(status_code=400, detail="فائل خالی ہے۔")
+    if not text:
+        raise HTTPException(
+            status_code=400,
+            detail="کتاب کا متن نہیں ملا۔ PDF/DOCX اپ لوڈ کریں۔",
+        )
 
-    # Cap upload size (~12 MB) for free-tier practicality
-    if len(data) > 12 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="فائل بہت بڑی ہے (حد ۱۲ میگابائٹ)۔")
+    # Keep payload/RAG practical on free tiers
+    if len(text) > 180_000:
+        text = text[:180_000]
 
     try:
-        book_text = extract_text(filename, data)
-        chunks = chunk_text(book_text)
+        chunks = chunk_text(text)
         if not chunks:
             raise ValueError("کتاب سے متن نہیں نکلا۔ اسکین شدہ PDF ہو تو پہلے OCR کریں۔")
-        # Limit chunks for free-tier embedding quota
         if len(chunks) > 80:
             chunks = chunks[:80]
         index = build_index(chunks)
